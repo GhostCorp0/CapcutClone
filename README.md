@@ -1,4 +1,4 @@
-# capcut_clone
+# Capcut Clone
 
 Capcut Clone
 
