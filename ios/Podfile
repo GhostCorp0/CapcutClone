@@ -30,7 +30,6 @@ flutter_ios_podfile_setup
 target 'Runner' do
   use_frameworks!
 
-  # arthenica/ffmpeg-kit release assets 404; use community-hosted xcframework
   pod 'ffmpeg-kit-ios-full', :podspec => 'https://raw.githubusercontent.com/luthviar/ffmpeg-kit-ios-full/main/ffmpeg-kit-ios-full.podspec'
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
