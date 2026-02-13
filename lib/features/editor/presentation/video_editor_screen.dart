@@ -24,6 +24,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   List<Map<String, String>> trimmedVideos = [];
   bool isSeeking = false;
   bool enableTransition = false;
+  bool isMuted = false;
 
   Future<void> _pickVideo() async {
     final XFile? file = await _picker.pickVideo(source: ImageSource.gallery);
@@ -124,9 +125,13 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
     await fileList.writeAsString(fileListContent);
     print("fileListContent : $fileListContent");
 
-    final String command = enableTransition
-        ? '-f concat -safe 0 -i "$fileListPath" -vf "fade=in:0:30" -c:v libx264 -preset medium -crf 23 -movflags +faststart "$mergedVideosPath" -y'
+    String command = enableTransition
+        ? '-f concat -safe 0 -i "$fileListPath" -vf "fade=in:0:30" -c:v h264_videotoolbox -q:v 70 -c:a copy -movflags +faststart "$mergedVideosPath" -y'
         : '-f concat -safe 0 -i "$fileListPath" -c copy -y "$mergedVideosPath"';
+
+    if(isMuted){
+      command = '-f concat -safe 0 -i "$fileListPath" -c copy -an "$mergedVideosPath" -y';
+    }
 
     await FFmpegKit.execute(command).then((session) async {
       final returnCode = await session.getReturnCode();
@@ -162,6 +167,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text("Video editor"),
+        backgroundColor: Colors.black,
         actions: [
           IconButton(
             onPressed: () {
@@ -334,8 +340,16 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
                       icon: Icon(Icons.speed, color: Colors.white),
                     ),
                     IconButton(
-                      onPressed: () {},
-                      icon: Icon(Icons.music_note, color: Colors.white),
+                      onPressed: () {
+                        setState(() {
+                          isMuted = !isMuted;
+                          _videoPlayerController!.setVolume(isMuted ? 0:1);
+                        });
+                      },
+                      icon: Icon(
+                        isMuted ? Icons.volume_off : Icons.volume_up,
+                        color: Colors.white,
+                      ),
                     ),
                   ],
                 ),
