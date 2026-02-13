@@ -89,7 +89,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
 
   Future<void> _generateThumbnail(String videoPath, String timestamp) async {
     final Directory tempDir = await getTemporaryDirectory();
-    final String fileName = 'thumb_$timestamp.mp4';
+    final String fileName = 'thumb_$timestamp.jpg';
     final String thumbnailPath = path.join(tempDir.path, fileName);
 
     final String command =
@@ -245,6 +245,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
                             trimmedVideos[index]['thumbnail'] != null
                                 ? Image.file(
                                     File(trimmedVideos[index]['thumbnail']!),
+                              fit: BoxFit.cover,width: double.infinity,
                                   )
                                 : Center(child: CircularProgressIndicator()),
                             Positioned(
