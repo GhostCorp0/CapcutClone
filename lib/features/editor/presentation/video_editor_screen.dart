@@ -23,6 +23,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   bool canShowEditor = false;
   List<Map<String, String>> trimmedVideos = [];
   bool isSeeking = false;
+  bool enableTransition = false;
 
   Future<void> _pickVideo() async {
     final XFile? file = await _picker.pickVideo(source: ImageSource.gallery);
@@ -118,26 +119,40 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
     File fileList = File(fileListPath);
 
     String fileListContent = trimmedVideos
-        .map((path) => "file '$path'")
+        .map((clip) => "file '${clip['video']}'")
         .join('\n');
     await fileList.writeAsString(fileListContent);
     print("fileListContent : $fileListContent");
 
-    final String command =
-        "-f concat -safe 0 -i $fileListPath -c copy $mergedVideosPath";
+    final String command = enableTransition
+        ? '-f concat -safe 0 -i "$fileListPath" -vf "fade=in:0:30" -c:v libx264 -preset medium -crf 23 -movflags +faststart "$mergedVideosPath" -y'
+        : '-f concat -safe 0 -i "$fileListPath" -c copy -y "$mergedVideosPath"';
+
     await FFmpegKit.execute(command).then((session) async {
       final returnCode = await session.getReturnCode();
       if (ReturnCode.isSuccess(returnCode)) {
         print("Merge video saved to $mergedVideosPath");
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Final video exported to : $mergedVideosPath"),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Final video exported to : $mergedVideosPath"),
+            ),
+          );
+        }
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Failed to merge videos")));
+        final String? failLog = await session.getFailStackTrace();
+        final String? output = await session.getOutput();
+        print("Merge failed. ReturnCode: $returnCode");
+        print("FFmpeg fail: $failLog");
+        print("FFmpeg output: $output");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Merge failed. See console for details."),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
       }
     });
   }
@@ -145,7 +160,23 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Video editor")),
+      appBar: AppBar(
+        title: Text("Video editor"),
+        actions: [
+          IconButton(
+            onPressed: () {
+              setState(() {
+                enableTransition = !enableTransition;
+              });
+            },
+            icon: Icon(
+              enableTransition
+                  ? Icons.swap_horizontal_circle
+                  : Icons.swap_horizontal_circle_outlined,
+            ),
+          ),
+        ],
+      ),
       body: Container(
         width: double.infinity,
         height: double.infinity,
@@ -245,7 +276,8 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
                             trimmedVideos[index]['thumbnail'] != null
                                 ? Image.file(
                                     File(trimmedVideos[index]['thumbnail']!),
-                              fit: BoxFit.cover,width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
                                   )
                                 : Center(child: CircularProgressIndicator()),
                             Positioned(
