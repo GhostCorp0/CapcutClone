@@ -95,6 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Center(
         child: Container(
           color: Colors.black,
+          width: double.infinity,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
