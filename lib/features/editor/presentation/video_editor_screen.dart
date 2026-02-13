@@ -25,6 +25,119 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   bool isSeeking = false;
   bool enableTransition = false;
   bool isMuted = false;
+  bool isSpeedControlVisible = false;
+  double playbackSpeed = 1.0;
+  String selectedAspectRatio = "Original";
+  final Map<String, List<int>> aspectRatios = {
+    "Original": [0, 0, 0, 0],
+    "16:9": [1920, 1080, 0, 0],
+    "9:16": [1080, 1920, 0, 0],
+    "4:3": [1440, 1080, 0, 0],
+  };
+
+  String selectFilter = "None";
+
+  final Map<String,String> filterCommands = {
+    "None":"",
+    "Brightness":"eq=brightness=0.3",
+    "Contrast":"eq=contrast=1.5",
+    "Saturation":"eq=saturation=1.8",
+    "Grayscale":"format=gray",
+  };
+
+  void _showFilterModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return Container(
+          color: Colors.black,
+          padding: EdgeInsets.all(16),
+          height: 250,
+          child: Column(
+            children: [
+              Text(
+                "Select Filter",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(height: 16,),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children:filterCommands.keys.map((filter){
+                  return GestureDetector(
+                    onTap: (){
+                      setState(() {
+                        selectFilter = filter;
+                      });
+                      Navigator.pop(context);
+                    },
+                    child: Container(
+                      padding: EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                          color: selectFilter == filter? Colors.green:Colors.white10,
+                          borderRadius: BorderRadius.circular(10)
+                      ),
+                      child: Text(filter,style: TextStyle(color: Colors.white),),
+                    ),
+                  );
+                }).toList(),
+              )
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _openCropRatioModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return Container(
+          color: Colors.black,
+          padding: EdgeInsets.all(16),
+          height: 200,
+          child: Column(
+            children: [
+              Text(
+                "Select crop ratio",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(height: 16,),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children:aspectRatios.keys.map((ratio){
+                  return GestureDetector(
+                    onTap: (){
+                      setState(() {
+                        selectedAspectRatio = ratio;
+                      });
+                      Navigator.pop(context);
+                    },
+                    child: Container(
+                      padding: EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: selectedAspectRatio == ratio? Colors.green:Colors.white10,
+                        borderRadius: BorderRadius.circular(10)
+                      ),
+                      child: Text(ratio,style: TextStyle(color: Colors.white),),
+                    ),
+                  );
+                }).toList(),
+              )
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   Future<void> _pickVideo() async {
     final XFile? file = await _picker.pickVideo(source: ImageSource.gallery);
@@ -129,9 +242,54 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
         ? '-f concat -safe 0 -i "$fileListPath" -vf "fade=in:0:30" -c:v h264_videotoolbox -q:v 70 -c:a copy -movflags +faststart "$mergedVideosPath" -y'
         : '-f concat -safe 0 -i "$fileListPath" -c copy -y "$mergedVideosPath"';
 
-    if(isMuted){
-      command = '-f concat -safe 0 -i "$fileListPath" -c copy -an "$mergedVideosPath" -y';
+    if (isMuted) {
+      command =
+          '-f concat -safe 0 -i "$fileListPath" -c copy -an "$mergedVideosPath" -y';
     }
+
+    if (playbackSpeed != 1.0) {
+      double setptsValue = 1 / playbackSpeed;
+      command =
+          '-f concat -safe 0 -i "$fileListPath" -filter_complex "[0:v]setpts=$setptsValue*PTS[v];[0:a]atempo=$playbackSpeed[a]" -map "[v]" -map "[a]" -c:v libx264 -preset medium -crf 23 $mergedVideosPath -y';
+    }
+
+    if (selectedAspectRatio != "Original") {
+      final videoWidth = _videoPlayerController!.value.size.width;
+      final videoHeight = _videoPlayerController!.value.size.height;
+
+      final aspectRatioSettings = aspectRatios[selectedAspectRatio]!;
+      int targetWidth = aspectRatioSettings[0];
+      int targetHeight = aspectRatioSettings[1];
+      int cropX = aspectRatioSettings[2];
+      int cropY = aspectRatioSettings[3];
+
+      double videoAspectRatio = videoWidth / videoHeight;
+      double targetAspectRatio = targetWidth / targetHeight.toDouble();
+
+      if (videoAspectRatio > targetAspectRatio) {
+        targetWidth = (videoHeight * targetAspectRatio).toInt();
+        cropX = ((videoWidth - targetWidth) ~/ 2);
+        cropY = 0;
+        targetHeight = videoHeight.toInt();
+      } else {
+        targetHeight = (videoWidth / targetAspectRatio).toInt();
+        cropY = ((videoHeight - targetHeight) ~/ 2);
+        cropX = 0;
+        targetWidth = videoWidth.toInt();
+      }
+
+      targetWidth = targetWidth - (targetWidth % 2);
+      targetHeight = targetHeight - (targetHeight % 2);
+
+      command =
+          '-f concat -safe 0 -i $fileListPath -vf crop=$targetWidth:$targetHeight:$cropX:$cropY -c copy $mergedVideosPath -y';
+    }
+
+    if(selectFilter != "None"){
+      String filter = filterCommands[selectFilter]!;
+      command = '-f concat -safe 0 -i $fileListPath -vf "$filter" -c copy $mergedVideosPath -y';
+    }
+
 
     await FFmpegKit.execute(command).then((session) async {
       final returnCode = await session.getReturnCode();
@@ -258,6 +416,32 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
                         _videoPlayerController!.play();
                       },
                     ),
+                    if (isSpeedControlVisible)
+                      Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Column(
+                          children: [
+                            Text(
+                              "Speed : ${playbackSpeed.toStringAsFixed(1)}x",
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            Slider(
+                              min: 0.5,
+                              max: 3.0,
+                              divisions: 6,
+                              value: playbackSpeed,
+                              onChanged: (value) {
+                                setState(() {
+                                  playbackSpeed = value;
+                                  _videoPlayerController!.setPlaybackSpeed(
+                                    playbackSpeed,
+                                  );
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -332,24 +516,37 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
                       icon: Icon(Icons.content_cut, color: Colors.white),
                     ),
                     IconButton(
-                      onPressed: () {},
+                      onPressed:() => _openCropRatioModal(context),
                       icon: Icon(Icons.crop, color: Colors.white),
                     ),
                     IconButton(
-                      onPressed: () {},
-                      icon: Icon(Icons.speed, color: Colors.white),
+                      onPressed: () {
+                        setState(() {
+                          isSpeedControlVisible = !isSpeedControlVisible;
+                        });
+                      },
+                      icon: Icon(
+                        Icons.speed,
+                        color: !isSpeedControlVisible
+                            ? Colors.white
+                            : Colors.green,
+                      ),
                     ),
                     IconButton(
                       onPressed: () {
                         setState(() {
                           isMuted = !isMuted;
-                          _videoPlayerController!.setVolume(isMuted ? 0:1);
+                          _videoPlayerController!.setVolume(isMuted ? 0 : 1);
                         });
                       },
                       icon: Icon(
                         isMuted ? Icons.volume_off : Icons.volume_up,
                         color: Colors.white,
                       ),
+                    ),
+                    IconButton(
+                      onPressed: () => _showFilterModal(context),
+                      icon: Icon(Icons.filter,color: Colors.white),
                     ),
                   ],
                 ),
