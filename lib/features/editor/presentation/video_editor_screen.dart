@@ -87,12 +87,43 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
     });
   }
 
+  Future<void> _mergeVideos() async {
+    if (trimmedVideos.isEmpty) return;
+
+    final Directory tempDir = await getTemporaryDirectory();
+    final String mergedVideosPath = '${tempDir.path}/merged_video.mp4';
+    final String fileListPath = '${tempDir.path}/file_list_txt';
+    File fileList = File(fileListPath);
+
+    String fileListContent = trimmedVideos
+        .map((path) => "file '$path'")
+        .join('\n');
+    await fileList.writeAsString(fileListContent);
+    print("fileListContent : $fileListContent");
+
+    final String command =
+        "-f concat -safe 0 -i $fileListPath -c copy $mergedVideosPath";
+    await FFmpegKit.execute(command).then((session) async {
+      final returnCode = await session.getReturnCode();
+      if (ReturnCode.isSuccess(returnCode)) {
+        print("Merge video saved to $mergedVideosPath");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Final video exported to : $mergedVideosPath"),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Failed to merge videos")));
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text("Video editor"),
-      ),
+      appBar: AppBar(title: Text("Video editor")),
       body: Container(
         width: double.infinity,
         height: double.infinity,
@@ -245,7 +276,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
               Padding(
                 padding: EdgeInsets.only(bottom: 25),
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed:_mergeVideos,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                   ),
