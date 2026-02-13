@@ -1,3 +1,4 @@
+import 'package:capcut_clone/features/splash/presentation/splash_screen.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -10,11 +11,12 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Capcut',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: false,
       ),
-      home:Placeholder(),
+      home:SplashScreen(),
     );
   }
 }
