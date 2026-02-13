@@ -21,7 +21,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   VideoEditorController? _videoEditorController;
   VideoPlayerController? _videoPlayerController;
   bool canShowEditor = false;
-  List<String> trimmedVideos = [];
+  List<Map<String, String>> trimmedVideos = [];
   bool isSeeking = false;
 
   Future<void> _pickVideo() async {
@@ -74,7 +74,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
       print('Returncode : $returnCode');
       if (ReturnCode.isSuccess(returnCode)) {
         setState(() {
-          trimmedVideos.add(outputPath);
+          _generateThumbnail(outputPath, timestamp);
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Video exported to: $outputPath")),
@@ -83,6 +83,28 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Failed to exported to : $outputPath")),
         );
+      }
+    });
+  }
+
+  Future<void> _generateThumbnail(String videoPath, String timestamp) async {
+    final Directory tempDir = await getTemporaryDirectory();
+    final String fileName = 'thumb_$timestamp.mp4';
+    final String thumbnailPath = path.join(tempDir.path, fileName);
+
+    final String command =
+        '-i $videoPath -ss 00:00:00.500 -vframes 1 $thumbnailPath';
+
+    await FFmpegKit.execute(command).then((session) async {
+      final returnCode = await session.getReturnCode();
+      if (ReturnCode.isSuccess(returnCode)) {
+        setState(() {
+          trimmedVideos.add({'video': videoPath, 'thumbnail': thumbnailPath});
+        });
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Failed to export video")));
       }
     });
   }
@@ -205,35 +227,48 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
               //Timeline editor
               Expanded(
                 flex: 2,
-                child: ListView.builder(
+                child: ReorderableListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: trimmedVideos.length,
                   itemBuilder: (context, index) {
-                    return Container(
-                      width: 100,
-                      margin: EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Stack(
-                        children: [
-                          Image.asset(
-                            'assets/images/capcut_logo.png',
-                            fit: BoxFit.cover,
-                          ),
-                          Positioned(
-                            child: IconButton(
-                              onPressed: () {
-                                setState(() {
-                                  trimmedVideos.removeAt(index);
-                                });
-                              },
-                              icon: Icon(Icons.delete, color: Colors.red),
+                    return ReorderableDragStartListener(
+                      key: ValueKey(trimmedVideos[index]['video']),
+                      index: index,
+                      child: Container(
+                        width: 100,
+                        margin: EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Stack(
+                          children: [
+                            trimmedVideos[index]['thumbnail'] != null
+                                ? Image.file(
+                                    File(trimmedVideos[index]['thumbnail']!),
+                                  )
+                                : Center(child: CircularProgressIndicator()),
+                            Positioned(
+                              right: 4,
+                              top: 4,
+                              child: IconButton(
+                                onPressed: () {
+                                  setState(() {
+                                    trimmedVideos.removeAt(index);
+                                  });
+                                },
+                                icon: Icon(Icons.delete, color: Colors.red),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
+                  },
+                  onReorder: (int oldIndex, int newIndex) {
+                    if (newIndex > oldIndex) newIndex -= 1;
+                    final Map<String, String> movedClip = trimmedVideos
+                        .removeAt(oldIndex);
+                    trimmedVideos.insert(newIndex, movedClip);
                   },
                 ),
               ),
@@ -276,7 +311,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
               Padding(
                 padding: EdgeInsets.only(bottom: 25),
                 child: ElevatedButton(
-                  onPressed:_mergeVideos,
+                  onPressed: _mergeVideos,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                   ),
