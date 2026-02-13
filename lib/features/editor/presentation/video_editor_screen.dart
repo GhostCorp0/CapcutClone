@@ -5,12 +5,14 @@ import 'package:ffmpeg_kit_flutter/return_code.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_editor/video_editor.dart';
 import 'package:video_player/video_player.dart';
 import 'package:path/path.dart' as path;
 
 class VideoEditorScreen extends StatefulWidget {
-  const VideoEditorScreen({super.key});
+  final String projectName;
+  const VideoEditorScreen({super.key, required this.projectName});
 
   @override
   State<VideoEditorScreen> createState() => _VideoEditorScreenState();
@@ -228,7 +230,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
     if (trimmedVideos.isEmpty) return;
 
     final Directory tempDir = await getTemporaryDirectory();
-    final String mergedVideosPath = '${tempDir.path}/merged_video.mp4';
+    final String mergedVideosPath = '${tempDir.path}/${widget.projectName}.mp4';
     final String fileListPath = '${tempDir.path}/file_list_txt';
     File fileList = File(fileListPath);
 
@@ -290,11 +292,20 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
       command = '-f concat -safe 0 -i $fileListPath -vf "$filter" -c copy $mergedVideosPath -y';
     }
 
+    SharedPreferences prefs = await SharedPreferences.getInstance();
 
     await FFmpegKit.execute(command).then((session) async {
       final returnCode = await session.getReturnCode();
+
       if (ReturnCode.isSuccess(returnCode)) {
         print("Merge video saved to $mergedVideosPath");
+
+        String thumbnailPath = trimmedVideos.first['thumbnail']!;
+        List<String> savedProjects = prefs.getStringList("saved_projects") ?? [];
+        savedProjects.add('$mergedVideosPath|$thumbnailPath');
+        prefs.setStringList('saved_projects',savedProjects);
+        print("savedProjects : $savedProjects");
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

@@ -16,9 +16,9 @@ dependencies:
   video_player:
   video_editor:
   path_provider:
-  # Local FFmpeg Kit (no pub.dev package)
   ffmpeg_kit_flutter:
     path: /Users/user/Desktop/Flutter/ffmpeg_kit/ffmpeg-kit/flutter/flutter
+  shared_preferences:
 
 dependency_overrides:
   ffmpeg_kit_flutter_platform_interface:
